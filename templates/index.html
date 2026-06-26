@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InstaSave</title>
+    <meta name="description" content="Download videos from YouTube and other platforms quickly and easily.">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg-start: #0f0c29;
+            --bg-mid: #302b63;
+            --bg-end: #24243e;
+            --glass-bg: rgba(255, 255, 255, 0.06);
+            --glass-border: rgba(255, 255, 255, 0.12);
+            --accent: #7c6bff;
+            --accent-glow: rgba(124, 107, 255, 0.4);
+            --accent-hover: #9d8fff;
+            --text-primary: #f0eeff;
+            --text-muted: rgba(240, 238, 255, 0.55);
+            --success: #3ecf8e;
+            --error: #ff6b6b;
+            --input-bg: rgba(255, 255, 255, 0.05);
+            --input-border: rgba(255, 255, 255, 0.15);
+            --input-focus: rgba(124, 107, 255, 0.6);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--bg-start), var(--bg-mid), var(--bg-end));
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        /* Animated background orbs */
+        body::before, body::after {
+            content: '';
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.25;
+            pointer-events: none;
+            animation: drift 12s ease-in-out infinite alternate;
+        }
+        body::before {
+            width: 500px; height: 500px;
+            background: #7c6bff;
+            top: -120px; left: -120px;
+        }
+        body::after {
+            width: 400px; height: 400px;
+            background: #ff6bdb;
+            bottom: -100px; right: -100px;
+            animation-delay: -6s;
+        }
+
+        @keyframes drift {
+            from { transform: translate(0, 0) scale(1); }
+            to   { transform: translate(40px, 30px) scale(1.08); }
+        }
+
+        /* Card */
+        .card {
+            position: relative;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-radius: 24px;
+            padding: 48px 44px;
+            width: 100%;
+            max-width: 520px;
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.4),
+                0 0 0 1px rgba(255,255,255,0.04) inset;
+            animation: slideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(32px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+
+        .icon-wrap {
+            width: 68px; height: 68px;
+            border-radius: 20px;
+            box-shadow: 0 0 28px var(--accent-glow);
+            margin-bottom: 20px;
+            object-fit: cover;
+            display: inline-block;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 40%, #c4b8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            font-weight: 400;
+        }
+
+        /* Alerts */
+        .alert {
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .alert-success {
+            background: rgba(62, 207, 142, 0.12);
+            border: 1px solid rgba(62, 207, 142, 0.3);
+            color: #3ecf8e;
+        }
+        .alert-danger, .alert-error {
+            background: rgba(255, 107, 107, 0.12);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            color: #ff6b6b;
+        }
+        .alert-info {
+            background: rgba(124, 107, 255, 0.12);
+            border: 1px solid rgba(124, 107, 255, 0.3);
+            color: #a89bff;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 10px;
+        }
+
+        .input-wrap {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 16px;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        input[type="url"] {
+            width: 100%;
+            padding: 14px 16px 14px 44px;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9375rem;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+            outline: none;
+        }
+
+        input[type="url"]::placeholder {
+            color: rgba(255,255,255,0.25);
+        }
+
+        input[type="url"]:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+            background: rgba(124, 107, 255, 0.06);
+        }
+
+        /* Button */
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: linear-gradient(135deg, #7c6bff, #b06bff);
+            color: #fff;
+            box-shadow: 0 4px 20px var(--accent-glow);
+            letter-spacing: 0.02em;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.08);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover:not(:disabled)::after { opacity: 1; }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px var(--accent-glow);
+        }
+        .btn:active:not(:disabled) { transform: translateY(0); }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Spinner */
+        #loading-section {
+            display: none;
+            text-align: center;
+            padding: 28px 0 8px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .spinner-ring {
+            display: inline-block;
+            width: 48px; height: 48px;
+            border: 3px solid rgba(124, 107, 255, 0.2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 16px;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .loading-text strong {
+            color: var(--text-primary);
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: var(--glass-border);
+            margin: 28px 0;
+        }
+
+        /* Supported sites */
+        .supported {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .supported span {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 4px 12px;
+            margin: 3px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        .supported span:hover {
+            background: rgba(255,255,255,0.09);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <!-- Header -->
+        <div class="header">
+            <img src="{{ url_for('static', filename='favicon.png') }}" class="icon-wrap" alt="Logo">
+            <h1>InstaSave</h1>
+            <p class="subtitle">Paste a link, hit download — done.</p>
+        </div>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, msg in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {% if category == 'success' %}✅{% elif category == 'danger' or category == 'error' %}❌{% else %}ℹ️{% endif %}
+                        {{ msg }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Download Form -->
+        <form method="POST" id="download-form">
+            <div class="form-group">
+                <label for="video_url">Video URL</label>
+                <div class="input-wrap">
+                    <span class="input-icon">🔗</span>
+                    <input
+                        type="url"
+                        name="video_url"
+                        id="video_url"
+                        placeholder="Paste your video URL here..."
+                        required
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                </div>
+            </div>
+            <button type="submit" class="btn" id="submit-btn">
+                ⬇&nbsp; Download Video
+            </button>
+        </form>
+
+        <!-- Loading Spinner -->
+        <div id="loading-section">
+            <div class="spinner-ring"></div>
+            <p class="loading-text">
+                <strong>Downloading…</strong><br>
+                Check your terminal window for live progress.
+            </p>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Supported sites -->
+        <div class="supported">
+            <span>▶ YouTube</span>
+            <span>📸 Instagram</span>
+            <span>🎵 TikTok</span>
+            <span>🐦 Twitter / X</span>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('download-form').addEventListener('submit', function () {
+            document.getElementById('submit-btn').disabled = true;
+            document.getElementById('loading-section').style.display = 'block';
+        });
+    </script>
+</body>
+</html>
