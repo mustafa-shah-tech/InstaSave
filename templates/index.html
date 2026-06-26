@@ -253,36 +253,63 @@
             transform: none;
         }
 
-        /* Spinner */
-        #loading-section {
-            display: none;
-            text-align: center;
-            padding: 28px 0 8px;
+        /* ── Progress Section ────────────────────────────────── */
+        #progress-section {
+            display: none;   /* hidden until a download starts */
+            margin-top: 24px;
             animation: fadeIn 0.3s ease;
         }
 
-        .spinner-ring {
-            display: inline-block;
-            width: 48px; height: 48px;
-            border: 3px solid rgba(124, 107, 255, 0.2);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .loading-text {
-            margin-top: 16px;
-            font-size: 0.875rem;
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8125rem;
             color: var(--text-muted);
-            line-height: 1.6;
+            margin-bottom: 10px;
         }
 
-        .loading-text strong {
-            color: var(--text-primary);
+        .progress-label span:last-child {
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 99px;
+            overflow: hidden;
+            border: 1px solid var(--glass-border);
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, var(--accent), #b06bff);
+            box-shadow: 0 0 12px var(--accent-glow);
+            transition: width 0.35s ease;
+        }
+
+        .progress-status {
+            margin-top: 10px;
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        /* Dynamic status alert shown by JS */
+        #status-alert {
+            display: none;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 20px;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.3s ease;
         }
 
         /* Divider */
@@ -327,7 +354,7 @@
             <p class="subtitle">Paste a link, hit download — done.</p>
         </div>
 
-        <!-- Flash messages -->
+        <!-- Server-side flash messages (page reload path) -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, msg in messages %}
@@ -339,8 +366,11 @@
             {% endif %}
         {% endwith %}
 
+        <!-- Dynamic status alert (SSE path, shown by JS) -->
+        <div id="status-alert"></div>
+
         <!-- Download Form -->
-        <form method="POST" id="download-form">
+        <form id="download-form">
             <div class="form-group">
                 <label for="video_url">Video URL</label>
                 <div class="input-wrap">
@@ -361,13 +391,16 @@
             </button>
         </form>
 
-        <!-- Loading Spinner -->
-        <div id="loading-section">
-            <div class="spinner-ring"></div>
-            <p class="loading-text">
-                <strong>Downloading…</strong><br>
-                Check your terminal window for live progress.
-            </p>
+        <!-- Real-time Progress Bar (hidden by default) -->
+        <div id="progress-section">
+            <div class="progress-label">
+                <span>Downloading…</span>
+                <span id="progress-pct">0%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <p class="progress-status" id="progress-status">Starting download…</p>
         </div>
 
         <div class="divider"></div>
@@ -382,9 +415,90 @@
     </div>
 
     <script>
-        document.getElementById('download-form').addEventListener('submit', function () {
-            document.getElementById('submit-btn').disabled = true;
-            document.getElementById('loading-section').style.display = 'block';
+        const form        = document.getElementById('download-form');
+        const submitBtn   = document.getElementById('submit-btn');
+        const progressSec = document.getElementById('progress-section');
+        const progressFill = document.getElementById('progress-fill');
+        const progressPct  = document.getElementById('progress-pct');
+        const progressStatus = document.getElementById('progress-status');
+        const statusAlert  = document.getElementById('status-alert');
+
+        let activeSource = null;
+
+        function showAlert(type, icon, message) {
+            // type: 'success' | 'danger'
+            statusAlert.className = 'alert alert-' + type;
+            statusAlert.style.display = 'flex';
+            statusAlert.textContent = icon + ' ' + message;
+        }
+
+        function resetUI() {
+            submitBtn.disabled = false;
+            progressSec.style.display = 'none';
+            progressFill.style.width = '0%';
+            progressPct.textContent = '0%';
+            progressStatus.textContent = 'Starting download…';
+        }
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();  // Prevent full-page form POST
+
+            const url = document.getElementById('video_url').value.trim();
+
+            // Client-side sanity check before opening SSE
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                showAlert('danger', '❌', 'Invalid URL. Must start with http:// or https://');
+                return;
+            }
+
+            // Close any previous SSE stream
+            if (activeSource) { activeSource.close(); activeSource = null; }
+
+            // Reset UI state
+            statusAlert.style.display = 'none';
+            submitBtn.disabled = true;
+            progressSec.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressPct.textContent = '0%';
+            progressStatus.textContent = 'Connecting…';
+
+            // Open the SSE stream
+            const encodedUrl = encodeURIComponent(url);
+            activeSource = new EventSource('/download?url=' + encodedUrl);
+
+            activeSource.onmessage = function (event) {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'progress') {
+                    const pct = data.percent;
+                    progressFill.style.width = pct + '%';
+                    progressPct.textContent = pct.toFixed(1) + '%';
+                    progressStatus.textContent = pct < 100 ? 'Downloading… ' + pct.toFixed(1) + '% complete' : 'Finalizing…';
+                }
+                else if (data.type === 'done') {
+                    activeSource.close();
+                    activeSource = null;
+                    progressFill.style.width = '100%';
+                    progressPct.textContent = '100%';
+                    // Brief pause so the user sees 100%, then show success
+                    setTimeout(() => {
+                        resetUI();
+                        showAlert('success', '✅', data.message);
+                    }, 600);
+                }
+                else if (data.type === 'error') {
+                    activeSource.close();
+                    activeSource = null;
+                    resetUI();
+                    showAlert('danger', '❌', data.message);
+                }
+            };
+
+            activeSource.onerror = function () {
+                if (activeSource) { activeSource.close(); activeSource = null; }
+                resetUI();
+                showAlert('danger', '❌', 'Connection lost. Please try again.');
+            };
         });
     </script>
 </body>
