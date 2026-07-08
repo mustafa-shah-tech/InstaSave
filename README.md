@@ -33,7 +33,7 @@ Before you begin, ensure you have the following installed on your machine:
 
 2. **Install the required Python packages:**
    ```bash
-   pip install flask yt-dlp
+   pip install -r requirements.txt
    ```
 
 ---
@@ -58,7 +58,7 @@ It will automatically start the background server and open the application in yo
 
 1. Paste your desired video URL into the input field.
 2. Click **Download Video**.
-3. Check your terminal window to see the live download progress percentage.
+3. Watch the real-time progress bar in the app — it updates live as your video downloads.
 4. Once completed, your video will be saved in your system's default `Downloads` folder!
 
 ---

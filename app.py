@@ -2,8 +2,10 @@ import os
 import secrets
 import json
 from urllib.parse import urlparse
+import queue
+import threading
 
-from flask import Flask, render_template, request, flash, Response, stream_with_context
+from flask import Flask, render_template, request, Response, stream_with_context
 import yt_dlp
 
 app = Flask(__name__)
@@ -47,55 +49,51 @@ def download():
             yield f'data: {payload}\n\n'
             return
 
-        # --- Progress hook passed to yt-dlp ---
-        def progress_hook(d):
-            if d['status'] == 'downloading':
-                percent_str = d.get('_percent_str', '0%').strip().replace('%', '')
-                try:
-                    percent = float(percent_str)
-                except ValueError:
-                    percent = 0.0
-                payload = json.dumps({'type': 'progress', 'percent': round(percent, 1)})
-                yield f'data: {payload}\n\n'
-
-        # yt-dlp doesn't natively support generator-based hooks, so we use a list
-        # to collect events and yield them outside the hook.
-        events = []
+        q = queue.Queue()
+        SENTINEL = object()
 
         def hook(d):
             if d['status'] == 'downloading':
-                percent_str = d.get('_percent_str', '0%').strip().replace('%', '')
+                pct_str = d.get('_percent_str', '0%').strip().replace('%','')
                 try:
-                    percent = float(percent_str)
+                    pct = float(pct_str)
                 except ValueError:
-                    percent = 0.0
-                events.append({'type': 'progress', 'percent': round(percent, 1)})
+                    pct = 0.0
+                q.put({'type': 'progress', 'percent': round(pct, 1)})
             elif d['status'] == 'finished':
-                events.append({'type': 'progress', 'percent': 100.0})
+                q.put({'type': 'progress', 'percent': 100.0})
 
         ydl_opts = {
             'format': 'best',
             'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s.%(ext)s'),
+            'restrictfilenames': True,
             'progress_hooks': [hook],
             # Suppress console output; progress comes via SSE
             'quiet': True,
             'no_warnings': True,
         }
 
+        def run_download():
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+                q.put({'type': 'done', 'message': 'Download completed! Check your Downloads folder.'})
+            except Exception as e:
+                q.put({'type': 'error', 'message': str(e)})
+            finally:
+                q.put(SENTINEL)
+
+        t = threading.Thread(target=run_download, daemon=True)
+        t.start()
+
         # Yield an initial "started" event so the UI shows the bar immediately
         yield f'data: {json.dumps({"type": "progress", "percent": 0})}\n\n'
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-                # Flush any remaining events collected by the hook
-                for ev in events:
-                    yield f'data: {json.dumps(ev)}\n\n'
-            payload = json.dumps({'type': 'done', 'message': 'Download completed! Check your Downloads folder.'})
-            yield f'data: {payload}\n\n'
-        except Exception as e:
-            payload = json.dumps({'type': 'error', 'message': str(e)})
-            yield f'data: {payload}\n\n'
+        while True:
+            item = q.get()
+            if item is SENTINEL:
+                break
+            yield f'data: {json.dumps(item)}\n\n'
 
     return Response(
         stream_with_context(event_stream(url)),

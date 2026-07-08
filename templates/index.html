@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InstaSave</title>
     <meta name="description" content="Download videos from YouTube and other platforms quickly and easily.">
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -424,6 +424,7 @@
         const statusAlert  = document.getElementById('status-alert');
 
         let activeSource = null;
+        let downloadComplete = false;
 
         function showAlert(type, icon, message) {
             // type: 'success' | 'danger'
@@ -433,6 +434,7 @@
         }
 
         function resetUI() {
+            downloadComplete = false;
             submitBtn.disabled = false;
             progressSec.style.display = 'none';
             progressFill.style.width = '0%';
@@ -476,6 +478,7 @@
                     progressStatus.textContent = pct < 100 ? 'Downloading… ' + pct.toFixed(1) + '% complete' : 'Finalizing…';
                 }
                 else if (data.type === 'done') {
+                    downloadComplete = true;
                     activeSource.close();
                     activeSource = null;
                     progressFill.style.width = '100%';
@@ -495,6 +498,7 @@
             };
 
             activeSource.onerror = function () {
+                if (downloadComplete) return;  // natural close after success, ignore
                 if (activeSource) { activeSource.close(); activeSource = null; }
                 resetUI();
                 showAlert('danger', '❌', 'Connection lost. Please try again.');
