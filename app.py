@@ -46,9 +46,9 @@ def download():
     We stream back 'data: <json>\\n\\n' events until done or error.
     """
     url = request.args.get('url', '').strip()
-    browser = request.args.get('browser', '').strip().lower()
+    cookies_path = request.args.get('cookies_path', '').strip()
 
-    def event_stream(url, browser):
+    def event_stream(url, cookies_path):
         # --- Validate URL ---
         if not is_valid_url(url):
             payload = json.dumps({'type': 'error', 'message': 'Invalid URL. Please enter a valid http:// or https:// link.'})
@@ -79,9 +79,8 @@ def download():
             'no_warnings': True,
         }
 
-        SUPPORTED_BROWSERS = {'chrome', 'firefox', 'edge', 'brave', 'opera'}
-        if browser in SUPPORTED_BROWSERS:
-            ydl_opts['cookiesfrombrowser'] = (browser,)
+        if cookies_path and os.path.isfile(cookies_path):
+            ydl_opts['cookiefile'] = cookies_path
 
         def run_download():
             try:
@@ -106,7 +105,7 @@ def download():
             yield f'data: {json.dumps(item)}\n\n'
 
     return Response(
-        stream_with_context(event_stream(url, browser)),
+        stream_with_context(event_stream(url, cookies_path)),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',
