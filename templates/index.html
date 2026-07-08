@@ -213,20 +213,6 @@
             background: rgba(124, 107, 255, 0.06);
         }
 
-        .cookies-hint {
-            margin-top: 8px;
-            font-size: 0.775rem;
-            color: var(--text-muted);
-            line-height: 1.5;
-        }
-        .cookies-hint a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-        .cookies-hint a:hover {
-            text-decoration: underline;
-        }
-
         /* Button */
         .btn {
             width: 100%;
@@ -400,33 +386,6 @@
                     >
                 </div>
             </div>
-            <div class="form-group" id="cookies-group">
-                <label for="cookies_path">
-                    Cookies file
-                    <span style="font-weight:400;opacity:0.6">
-                      (optional — required for Instagram, Twitter/X)
-                    </span>
-                </label>
-                <div class="input-wrap">
-                    <span class="input-icon">🍪</span>
-                    <input
-                        type="text"
-                        id="cookies_path"
-                        placeholder="C:\Users\YourName\cookies.txt"
-                        autocomplete="off"
-                        spellcheck="false"
-                    >
-                </div>
-                <p class="cookies-hint">
-                    Export using
-                    <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
-                       target="_blank" rel="noopener">Get cookies.txt LOCALLY</a>
-                    (Chrome) or
-                    <a href="https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/"
-                       target="_blank" rel="noopener">cookies.txt</a>
-                    (Firefox). Log into Instagram first, then export.
-                </p>
-            </div>
             <button type="submit" class="btn" id="submit-btn">
                 ⬇&nbsp; Download Video
             </button>
@@ -506,10 +465,8 @@
             progressStatus.textContent = 'Connecting…';
 
             // Open the SSE stream
-            const cookiesPath = document.getElementById('cookies_path').value.trim();
             const encodedUrl = encodeURIComponent(url);
-            const sseUrl = '/download?url=' + encodedUrl +
-                           (cookiesPath ? '&cookies_path=' + encodeURIComponent(cookiesPath) : '');
+            const sseUrl = '/download?url=' + encodedUrl;
             activeSource = new EventSource(sseUrl);
 
             activeSource.onmessage = function (event) {
