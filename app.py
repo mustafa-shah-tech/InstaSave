@@ -4,6 +4,7 @@ import json
 from urllib.parse import urlparse
 import queue
 import threading
+import re
 
 from flask import Flask, render_template, request, Response, stream_with_context
 import yt_dlp
@@ -28,6 +29,10 @@ def is_valid_url(url: str) -> bool:
         return False
 
 
+def strip_ansi(text: str) -> str:
+    return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+
 @app.route('/', methods=['GET'])
 def home():
     return render_template('index.html')
@@ -41,8 +46,9 @@ def download():
     We stream back 'data: <json>\\n\\n' events until done or error.
     """
     url = request.args.get('url', '').strip()
+    browser = request.args.get('browser', '').strip().lower()
 
-    def event_stream(url):
+    def event_stream(url, browser):
         # --- Validate URL ---
         if not is_valid_url(url):
             payload = json.dumps({'type': 'error', 'message': 'Invalid URL. Please enter a valid http:// or https:// link.'})
@@ -73,13 +79,17 @@ def download():
             'no_warnings': True,
         }
 
+        SUPPORTED_BROWSERS = {'chrome', 'firefox', 'edge', 'brave', 'opera'}
+        if browser in SUPPORTED_BROWSERS:
+            ydl_opts['cookiesfrombrowser'] = (browser,)
+
         def run_download():
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
                 q.put({'type': 'done', 'message': 'Download completed! Check your Downloads folder.'})
             except Exception as e:
-                q.put({'type': 'error', 'message': str(e)})
+                q.put({'type': 'error', 'message': strip_ansi(str(e))})
             finally:
                 q.put(SENTINEL)
 
@@ -96,7 +106,7 @@ def download():
             yield f'data: {json.dumps(item)}\n\n'
 
     return Response(
-        stream_with_context(event_stream(url)),
+        stream_with_context(event_stream(url, browser)),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',
